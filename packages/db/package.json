@@ -1,0 +1,29 @@
+{
+  "name": "@master-trip/db",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Prisma database client and schema — shared across all apps",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "db:generate": "prisma generate",
+    "db:migrate": "prisma migrate dev",
+    "db:push": "prisma db push",
+    "db:studio": "prisma studio",
+    "db:seed": "tsx src/seed.ts",
+    "type-check": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@prisma/client": "^5.20.0",
+    "zod": "^3.23.8"
+  },
+  "devDependencies": {
+    "@prisma/config": "^7.8.0",
+    "@repo/typescript-config": "workspace:*",
+    "@types/node": "^20.0.0",
+    "prisma": "^5.20.0",
+    "tsx": "^4.19.0",
+    "typescript": "^5.6.3"
+  }
+}

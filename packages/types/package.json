@@ -1,0 +1,20 @@
+{
+  "name": "@master-trip/types",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Shared Zod schemas and TypeScript types for all external API payloads",
+  "exports": {
+    ".": "./src/index.ts",
+    "./flight": "./src/flight.ts",
+    "./hotel": "./src/hotel.ts",
+    "./tour": "./src/tour.ts",
+    "./booking": "./src/booking.ts"
+  },
+  "devDependencies": {
+    "@repo/typescript-config": "workspace:*",
+    "typescript": "^5.6.3"
+  },
+  "dependencies": {
+    "zod": "^3.23.8"
+  }
+}
