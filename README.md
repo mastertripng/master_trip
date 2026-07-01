@@ -1,94 +1,474 @@
-# Master-Trip Monorepo Architecture
+# Master-Trip — System Architecture
 
-Welcome to the Master-Trip codebase. We use Turborepo to manage our code, allowing us to strictly separate the fast, user-facing UI from the heavy, high-concurrency background processors.
+> Turborepo monorepo. Multi-vertical travel booking platform (Flights, Hotels, Tours, Cars) with an autonomous AI support agent and a full internal operations dashboard.
 
-This document serves as the master architectural reference for all developers working on the project.
+---
+
+## Monorepo Structure
+
+```
+master-trip/
+├── apps/
+│   ├── web/          → Next.js 16 (App Router) — Vercel (Public)
+│   ├── admin/        → Next.js 16 (App Router) — Vercel (Internal / Cloudflare Access)
+│   └── workers/      → Bun + Hono + Mastra — Fly.io
+├── packages/
+│   ├── api/          → oRPC routers, adapters, aggregators (framework-agnostic)
+│   ├── db/           → Prisma schema + client (Supabase PostgreSQL)
+│   ├── types/        → Zod validation schemas (shared contract)
+│   ├── ui/           → Shared React component library
+│   └── eslint-config / typescript-config
+└── turbo.json
+```
+
+---
+
+## Apps
+
+### `apps/web` — Next.js Frontend (Public Portal)
+| Property | Detail |
+|---|---|
+| Framework | Next.js 16 (App Router) |
+| Deploys to | Vercel (Serverless / Edge CDN) |
+| Port (local) | `3000` |
+| Communicates via | oRPC React Query client → `apps/workers` |
+| Auth | Magic Link (guest checkout) |
+| Never does | Direct DB queries, raw provider API calls |
+
+**Route Groups:**
+
+```
+apps/web/app/
+│
+├── (customer)/                  ← Public-facing portal (CUSTOMER role)
+│   ├── page.tsx                 ← Landing / home
+│   ├── flights/                 ← Flight search + results
+│   ├── hotels/                  ← Hotel search + results
+│   ├── tours/                   ← Tour search + results
+│   ├── cart/                    ← Unified trip cart (all verticals)
+│   ├── checkout/                ← Paystack payment init + confirmation
+│   └── support/                 ← AI chat + realtime human handoff
+```
+
+---
+
+### `apps/admin` — Internal Operations Dashboard
+| Property | Detail |
+|---|---|
+| Framework | Next.js 16 (App Router) |
+| Deploys to | Vercel (Separate Project / `ops.master-trip.com`) |
+| Network Security | Cloudflare Access (Zero Trust Network Access) |
+| Auth | WorkOS (SAML/SSO for B2B) |
+| Port (local) | `3001` |
+| Communicates via | oRPC React Query client → `apps/workers` |
+
+**Routes:**
+
+```
+apps/admin/app/
+│
+├── support/                 ← Support queue + human takeover
+├── bookings/                ← Full trip lifecycle management
+├── fulfillment/             ← QStash job monitor + DLQ intervention
+├── markup/                  ← Markup rules CRUD engine
+├── finance/                 ← Paystack splits + Flutterwave VCC
+├── ai-ops/                  ← OpenRouter cost + agent KPIs
+├── knowledge/               ← pgvector policy document manager
+├── analytics/               ← Revenue, funnel, routes, retention
+└── users/                   ← User management + WorkOS SSO orgs
+```
+
+---
+
+### `apps/workers` — Bun + Hono API Server & AI Worker
+| Property | Detail |
+|---|---|
+| Runtime | Bun |
+| Framework | Hono |
+| Deploys to | Fly.io (always-on container) |
+| Port (local) | `8080` |
+| Concurrency | Handles 10,000+ RPS via request coalescing |
+
+**Responsibilities:**
+
+| Endpoint / Job | What it does |
+|---|---|
+| `GET/POST /api/*` | Mounts `packages/api` oRPC router — serves live search to `apps/web` |
+| `POST /webhook/fulfillment` | QStash receiver — validates signature, triggers Mastra fulfillment agent |
+| `POST /webhook/support` | QStash receiver — triggers Mastra support agent with userId context |
+| Mastra: `fulfillmentAgent` | Iterates `TripItem[]`, calls provider adapters, updates DB state |
+| Mastra: `supportAgent` | RAG-powered AI chat, reads user itinerary, escalates to human if needed |
+
+```
+apps/workers/src/
+├── server.ts              ← Hono entry point
+├── mastra/                ← Mastra framework config
+└── agents/
+    ├── fulfillment.ts     ← Books each TripItem with provider APIs
+    └── support.ts         ← GPT-4o via OpenRouter, pgvector RAG, VIP escalation
+```
+
+---
+
+## Packages
+
+### `packages/api` — Business Logic (oRPC)
+| Property | Detail |
+|---|---|
+| What it is | Pure, framework-agnostic TypeScript |
+| What it contains | oRPC routers, provider adapters, aggregators, markup engine |
+| Hard rule | **No** `req`, `res`, Hono, Express, or Fastify code. Ever. |
+
+```
+packages/api/src/
+├── router.ts                        ← Root oRPC router
+├── procedures.ts                    ← Base + auth middleware
+├── routers/
+│   ├── flights.ts                   ← Flight search + Redis cache
+│   ├── hotels.ts                    ← Hotel search + Redis cache
+│   ├── bookings.ts                  ← Cart, Paystack init, webhook
+│   ├── support.ts                   ← Chat history, message dispatch
+│   └── tours.ts                     ← Tours (future)
+└── providers/
+    ├── flights/
+    │   ├── registry.ts              ← Provider plug-in array
+    │   ├── aggregator.ts            ← Fan-out + request coalescing
+    │   └── adapters/
+    │       └── travels247.adapter.ts ← 247 Travels: auth, normalize, book, revalidate
+    ├── hotels/
+    │   ├── registry.ts
+    │   ├── aggregator.ts            ← B2B room accumulator (splits 50-room orders)
+    │   └── adapters/
+    │       └── booking-com.adapter.ts ← Booking.com: auth, normalize, bulk rooms
+    └── pricing/                     ← MarkupRule engine (DB-driven, no deploy needed)
+```
+
+**Adapter Pattern — How providers plug in:**
+```typescript
+const flightProviders = [new Travels247Adapter(env.KEY), /* future providers */];
+const results = await Promise.allSettled(
+  flightProviders.map(p => p.searchFlights(input))
+);
+// Provider crash = auto-fallback to others. Zero downtime.
+```
+
+**B2B Accumulator — 50-room corporate order:**
+```typescript
+let needed = 50;
+const sorted = sortCheapestFirst(await Promise.allSettled(hotelProviders.map(p => p.searchRooms(input))));
+for (const api of sorted) {
+  if (needed === 0) break;
+  const take = Math.min(api.availableRooms, needed);
+  finalOrder.push({ provider: api.name, rooms: take });
+  needed -= take;
+}
+```
+
+---
+
+### `packages/db` — Database (Prisma + Supabase)
+| Property | Detail |
+|---|---|
+| ORM | Prisma |
+| Database | PostgreSQL (hosted on Supabase) |
+| Extensions | `pgvector` (RAG for AI support agent) |
+| Hard rule | All schema changes via `schema.prisma` + `pnpm db:push`. Never raw SQL on Supabase. |
+
+**Core Models:**
+
+| Model | Purpose |
+|---|---|
+| `User` | Person who pays. Has `UserRole` + `UserTier` |
+| `Traveler` | Person who travels. Decoupled from User (corporate can book for staff) |
+| `Trip` | The unified cart. One payment covers all verticals |
+| `TripItem` | Polymorphic — FLIGHT / HOTEL / TOUR / CAR. JSONB metadata per vertical |
+| `Payment` | Paystack reference, amount, status |
+| `Refund` | Partial or full. Linked to Payment |
+| `MarkupRule` | Ops-managed pricing rules. Route / cabin / tier / vertical scoped |
+| `SupportChat` | Full chat history. Role: USER / ASSISTANT / HUMAN_AGENT |
+
+**Enums:**
+```
+TripStatus:        DRAFT → PAID → FULFILLING → CONFIRMED / PARTIAL_FAIL / CANCELLED / REFUNDED
+FulfillmentStatus: PENDING → CONFIRMED / FAILED / REFUNDED
+UserRole:          CUSTOMER / SUPPORT_AGENT / OPERATIONS / ADMIN
+UserTier:          STANDARD / VIP / CORPORATE
+ChatStatus:        ACTIVE / NEEDS_HUMAN / NEEDS_HUMAN_URGENT / RESOLVED
+```
+
+---
+
+### `packages/types` — Zod Schemas (Shared Contract)
+
+Shared between `apps/web`, `packages/api`, and `apps/workers`.
+Defines `FlightResult`, `HotelResult`, `TripItem`, and all oRPC input/output shapes.
+No frontend-backend drift. Ever.
+
+---
+
+### `packages/ui` — Shared Component Library
+
+Shared React components (buttons, cards, tables, modals) used by both the customer portal and admin dashboard.
+
+---
+
+## External Services
+
+| Service | Provider | Used For |
+|---|---|---|
+| **Database** | Supabase (PostgreSQL) | All persistent data + `pgvector` for AI RAG |
+| **Realtime** | Supabase Realtime | VIP/urgent chat escalation pings to admin dashboard |
+| **Cache** | Upstash Redis | GDS search result caching (prevents rate limit breaches) |
+| **Queue** | QStash (Upstash) | Async fulfillment jobs + DLQ (3× retry + exponential backoff) |
+| **Flights** | 247 Travels API | IATA-certified consolidator, direct airline inventory |
+| **Hotels** | Booking.com API | Reliable lodging — reservation guaranteed in hotel's system |
+| **Payments (B2C)** | Paystack | Customer checkout — captures full trip amount |
+| **Payments (B2B)** | Flutterwave Issuing | Virtual Credit Cards (VCC) to pay provider APIs per booking |
+| **Zero Trust** | Cloudflare Access | Protects `apps/admin` from the public internet entirely |
+| **Auth** | WorkOS | SAML/SSO for corporate clients and internal ops |
+| **AI LLM Routing** | OpenRouter | Unified API — swap GPT-4o / Claude / open-source. Prevents vendor lock-in |
+| **Emails** | Resend | Transactional — e-tickets, itineraries, deal blast alerts, magic links |
+| **File Uploads** | UploadThing | Passport / ID document uploads (serverless, zero infra) |
+| **Analytics** | PostHog | Checkout funnel drop-off tracking, session replay |
+| **Error Tracking** | Sentry | Runtime oRPC + Next.js error capture |
+| **Logging** | Axiom / Grafana | Aggregated logs from Vercel + Fly.io workers |
+
+---
+
+## Role-Based Access Control (RBAC)
+
+Enforced at **three independent layers**.
+
+**The roles:**
+```prisma
+enum UserRole {
+  CUSTOMER        // Client portal only — never touches the internal dashboard
+  SUPPORT_AGENT   // Support queue + read-only booking view
+  OPERATIONS      // Bookings, fulfillment, markup, finance
+  ADMIN           // Full access — all 9 dashboard sections
+}
+```
+
+**Access matrix:**
+
+| Dashboard Section | SUPPORT_AGENT | OPERATIONS | ADMIN |
+|---|:---:|:---:|:---:|
+| 1. Support Queue | ✅ | ❌ | ✅ |
+| 2. Booking Management | ✅ read-only | ✅ full | ✅ full |
+| 3. Fulfillment Monitor | ❌ | ✅ | ✅ |
+| 4. Markup Rules Engine | ❌ | ✅ | ✅ |
+| 5. Finance & Payments | ❌ | ✅ | ✅ |
+| 6. AI Ops Panel | ❌ | ❌ | ✅ |
+| 7. Knowledge Base Manager | ❌ | ✅ | ✅ |
+| 8. Analytics & Reporting | ❌ | ❌ | ✅ |
+| 9. User Management | ❌ | ❌ | ✅ |
+
+**Enforcement:**
+
+| Layer | Mechanism | Effect |
+|---|---|---|
+| **1. Backend** | oRPC procedure middleware checks `context.userRole` | `403 FORBIDDEN` if role insufficient |
+| **2. Network / Frontend** | Cloudflare Access blocks public internet + Next.js middleware enforces specific role checks | ZTNA block / redirect |
+| **3. Database** | Prisma middleware appends `where: { userId }` to all queries | No cross-user data leak, even if layers 1 & 2 fail |
+
+---
+
+## Data Flows
+
+### 1. Search Flow
+```
+User searches flights on apps/web
+    → oRPC client → apps/workers (Hono)
+    → packages/api: check Upstash Redis cache
+        → Cache HIT: return cached result instantly
+        → Cache MISS: fan-out to 247 Travels API + future providers (parallel)
+            → normalize responses via adapter
+            → apply MarkupRule engine (from DB)
+            → cache result in Redis
+            → return to apps/web
+```
+
+### 2. Checkout & Payment Flow
+```
+User confirms cart (Trip + TripItems[]) on apps/web
+    → oRPC createTrip → save Trip + TripItems to DB (status: DRAFT)
+    → oRPC initPayment → revalidate prices with provider APIs
+    → Paystack: generate payment link
+    → User completes payment on Paystack
+    → Paystack webhook: charge.success
+        → DB: Trip.status = PAID
+        → Payment record created (paystackReference)
+        → QStash: emit CheckoutComplete event
+        → Return success to apps/web instantly
+```
+
+### 3. Async Fulfillment Flow
+```
+QStash delivers CheckoutComplete to apps/workers /webhook/fulfillment
+    → Validate QStash signature
+    → Mastra fulfillmentAgent: load Trip + TripItems from DB
+    → For each TripItem (parallel where possible):
+        → FLIGHT: Travels247Adapter.bookFlight() → PNR returned
+            → DB: TripItem.fulfillmentStatus = CONFIRMED
+        → HOTEL: BookingComAdapter.bookHotel() → confirmation ID returned
+            → DB: TripItem.fulfillmentStatus = CONFIRMED
+    → All confirmed: Trip.status = CONFIRMED
+        → Resend: email PDF itinerary + e-ticket to user
+    → Any item fails after 3 QStash retries:
+        → DB: TripItem.fulfillmentStatus = FAILED
+        → DB: Trip.status = PARTIAL_FAIL
+        → Paystack: partial refund for failed item(s)
+        → Resend: notify user with alternatives
+        → Admin DLQ queue lights up in dashboard
+```
+
+### 4. AI Support Flow
+```
+User sends message in support chat on apps/web
+    → oRPC supportRouter.sendMessage → saved to SupportChat (role: USER)
+    → QStash: emit support job with userId context
+    → apps/workers: Mastra supportAgent
+        → Prisma (userId-isolated): load user's full Trip + TripItems
+        → pgvector RAG: search airline/visa policy database for relevant rules
+        → OpenRouter: send context + policy + user message to LLM (GPT-4o)
+        → AI response saved to SupportChat (role: ASSISTANT)
+        → Supabase Realtime: push response to apps/web chat UI
+
+    If escalation triggered (VIP tier / distress / confidential):
+        → DB: SupportChat.status = NEEDS_HUMAN_URGENT
+        → Supabase Realtime: ping internal support dashboard
+        → Human agent takes over → messages as role: HUMAN_AGENT
+        → Agent resolves → SupportChat.status = RESOLVED
+```
 
 ---
 
 ## Architecture Diagram
 
-Below is a visual representation of how the deployments and internal packages communicate:
-
 ```mermaid
-graph TD
-    subgraph "Vercel (Serverless)"
-        WEB["apps/web (Next.js Frontend)"]
+flowchart TD
+    subgraph VercelWeb["Vercel (Public)"]
+        WEB["apps/web\nNext.js 16\nCustomer Portal"]
     end
 
-    subgraph "Fly.io (Container)"
-        HONO["apps/workers (Bun + Hono API & Worker)"]
+    subgraph VercelAdmin["Vercel (Internal)"]
+        ADMIN["apps/admin\nNext.js 16\nOperations Dashboard"]
     end
 
-    subgraph "Turborepo Shared Packages"
-        API["packages/api (oRPC, Aggregators, Adapters)"]
-        TYPES["packages/types (Zod Schemas)"]
-        DB["packages/db (Prisma)"]
+    CLOUDFLARE{"Cloudflare Access\n(Zero Trust Proxy)"}
+
+    subgraph FlyIO["Fly.io (Always-On Container)"]
+        WORKERS["apps/workers\nBun + Hono\nAPI Server + Mastra AI"]
     end
 
-    subgraph "External Providers"
-        REDIS[("Upstash Redis")]
-        POSTGRES[("Supabase PostgreSQL")]
-        FLIGHTS["247 Travels API"]
+    subgraph Packages["Turborepo Shared Packages"]
+        API["packages/api\noRPC Routers\nAdapters + Aggregators"]
+        DB["packages/db\nPrisma Client"]
+        TYPES["packages/types\nZod Schemas"]
     end
 
-    WEB -- "oRPC via HTTP" --> HONO
-    WEB -. "Type Sharing" .-> TYPES
+    subgraph Infra["Infrastructure (SaaS)"]
+        POSTGRES[("Supabase PostgreSQL\n+ pgvector")]
+        REDIS[("Upstash Redis\nSearch Cache")]
+        QSTASH["QStash\nJob Queue + DLQ"]
+        REALTIME["Supabase Realtime\nWebSockets"]
+    end
 
-    HONO -- "Imports Business Logic" --> API
-    HONO -. "Type Sharing" .-> TYPES
-    HONO -. "Imports Models" .-> DB
+    subgraph Providers["External APIs"]
+        TRAVELS["247 Travels\nFlights"]
+        BOOKING["Booking.com\nHotels"]
+        PAYSTACK["Paystack\nB2C Payments"]
+        FLUTTERWAVE["Flutterwave\nVCC (B2B)"]
+        OPENROUTER["OpenRouter\nLLM Routing"]
+        WORKOS["WorkOS\nSSO / SAML"]
+    end
 
-    API -- "Cache GDS Responses" --> REDIS
-    API -- "Aggregate Data" --> FLIGHTS
-    DB -- "Connection Pool" --> POSTGRES
+    subgraph Observability["Observability"]
+        SENTRY["Sentry\nError Tracking"]
+        POSTHOG["PostHog\nAnalytics + Funnel"]
+        AXIOM["Axiom\nLogs"]
+        RESEND["Resend\nTransactional Email"]
+    end
+
+    WEB -- "oRPC via HTTP" --> WORKERS
+    CLOUDFLARE -- "Authenticated Traffic" --> ADMIN
+    ADMIN -- "oRPC via HTTP" --> WORKERS
+    WEB -. "Analytics" .-> POSTHOG
+    ADMIN -. "Auth" .-> WORKOS
+    WORKERS --> API
+    WORKERS --> DB
+    WORKERS -. "Types" .-> TYPES
+    WORKERS -- "Cache" --> REDIS
+    WORKERS -- "Enqueue Jobs" --> QSTASH
+    WORKERS -- "LLM Calls" --> OPENROUTER
+    QSTASH -- "Webhook Delivery" --> WORKERS
+    API --> TRAVELS
+    API --> BOOKING
+    API --> PAYSTACK
+    API --> FLUTTERWAVE
+    DB --> POSTGRES
+    WORKERS -- "Realtime Push" --> REALTIME
+    REALTIME -- "WebSocket" --> WEB
+    WORKERS -. "Errors" .-> SENTRY
+    WORKERS -. "Logs" .-> AXIOM
+    WORKERS --> RESEND
 ```
 
 ---
 
-## Directory Structure & Responsibilities
+## Coding Rules (Non-Negotiable)
 
-### 1. apps/web (The Frontend)
-- **What it is:** A React/Next.js application.
-- **Where it deploys:** Vercel (Serverless/Edge).
-- **What it does:** Renders the UI and serves the HTML/CSS/JS. It does not directly contact the flight providers or the database. It only communicates with the backend via the oRPC React Query client.
-- **Why Serverless:** It scales instantly to zero when there is no traffic and serves UI assets globally via CDNs for maximum speed.
-
-### 2. apps/workers (The API Server & AI Worker)
-- **What it is:** A Bun + Hono server containing our Mastra AI Agents.
-- **Where it deploys:** Fly.io or AWS ECS (Always-On Docker Container).
-- **What it does:** 
-  1. Live Search: Mounts the oRPC router to answer live flight/hotel queries from apps/web.
-  2. Async Fulfillment: Listens for QStash webhooks to run the Mastra AI agents. When a user pays for a flight, checkout finishes instantly, and QStash pings this worker to securely talk to the airline APIs in the background.
-- **Why Bun+Hono:** We expect massive concurrency spikes (e.g., 10,000 users searching for flights at once). Bun+Hono is astronomically faster than Express/Next.js and allows us to use "Request Coalescing" (in-memory waiting rooms) to protect the APIs from crashing.
-
-### 3. packages/api (The Brains / Business Logic)
-- **What it is:** Pure TypeScript logic that is completely framework-agnostic.
-- **What it does:** This folder contains the oRPC Routers, the Aggregators, and the Adapters (e.g., 247 Travels, Booking.com).
-- **How it is used:** apps/workers imports this package and wraps it inside Hono to serve to the web. 
-- *Note:* Do not put HTTP server code (like req/res or Express plugins) in this folder.
-
-### 4. packages/db (The Database)
-- **What it is:** PostgreSQL schema managed via Prisma ORM.
-- **What it does:** Handles database migrations, Prisma Client generation, and database configuration (prisma.config.ts).
-- **Data Protection:** We use strict Prisma middleware to automatically isolate data by userId to prevent data leaks.
-
-### 5. packages/types (The Contracts)
-- **What it is:** Zod validation schemas.
-- **What it does:** Used by the backend to validate incoming data, and by the frontend to know exactly what the backend will return. This guarantees 100% end-to-end type safety.
+| Rule | Where | What |
+|---|---|---|
+| Business logic | `packages/api/src/` | All provider integrations, oRPC endpoints, aggregators |
+| No HTTP code in api | `packages/api/src/` | Zero `req`/`res`/Hono/Express. Pure TypeScript only |
+| UI code | `apps/web/app/` | React/Next.js only. No DB queries, no raw API calls |
+| DB changes | `packages/db/prisma/schema.prisma` | Always through Prisma. Never alter Supabase directly |
+| Request coalescing | `packages/api/src/providers/*/aggregator.ts` | Dedup logic here, not in Hono server |
+| Auto-scaling | `apps/workers/fly.toml` | Infra config lives here only |
+| Type contracts | `packages/types/src/` | All shared Zod schemas. Frontend and backend use same types |
 
 ---
 
-## How Data Flows
+## Getting Started
 
-1. The user clicks "Search Flights" on `apps/web`.
-2. The oRPC client inside `apps/web` sends a JSON request to the `apps/workers` API Server running on Fly.io.
-3. The Bun+Hono server receives the request, runs the Aggregator from `packages/api`, pulls cached data from Redis, and applies the Postgres Markup rules from `packages/db`.
-4. The server returns the strictly typed JSON back to `apps/web`.
+```bash
+# 1. Install
+pnpm install
 
-## Getting Started Locally
+# 2. Configure environment
+cp .env.example .env.local
+# Fill in: DATABASE_URL, UPSTASH_*, QSTASH_*, PAYSTACK_*, OPENROUTER_*, WORKOS_*
 
-1. Install dependencies using Bun or pnpm: `pnpm install`
-2. Start the database (ensure your .env contains the Supabase Postgres URL).
-3. Push the database schema: `cd packages/db && pnpm db:push`
-4. Run the entire monorepo: `pnpm dev` (This will start the Next.js frontend on port 3000, and the Bun/Hono server on port 8080).
+# 3. Push DB schema
+cd packages/db && pnpm db:push
+
+# 4. Run everything
+pnpm dev
+# → apps/web     on http://localhost:3000
+# → apps/admin   on http://localhost:3001
+# → apps/workers on http://localhost:8080
+```
+
+## Environment Variables
+
+| Variable | Service | Used By |
+|---|---|---|
+| `DATABASE_URL` | Supabase PostgreSQL | `packages/db` |
+| `DIRECT_URL` | Supabase (migrations) | `packages/db` |
+| `UPSTASH_REDIS_REST_URL` | Upstash Redis | `packages/api` |
+| `UPSTASH_REDIS_REST_TOKEN` | Upstash Redis | `packages/api` |
+| `QSTASH_URL` | QStash | `apps/workers` |
+| `QSTASH_TOKEN` | QStash | `apps/workers` |
+| `QSTASH_CURRENT_SIGNING_KEY` | QStash signature | `apps/workers` |
+| `TRAVELS247_API_KEY` | 247 Travels | `packages/api` |
+| `BOOKINGCOM_API_KEY` | Booking.com | `packages/api` |
+| `PAYSTACK_SECRET_KEY` | Paystack | `packages/api` |
+| `FLUTTERWAVE_SECRET_KEY` | Flutterwave VCC | `packages/api` |
+| `OPENROUTER_API_KEY` | OpenRouter | `apps/workers` |
+| `WORKOS_API_KEY` | WorkOS | `apps/web` |
+| `WORKOS_CLIENT_ID` | WorkOS | `apps/web` |
+| `RESEND_API_KEY` | Resend | `apps/workers` |
+| `SENTRY_DSN` | Sentry | `apps/web`, `apps/workers` |
+| `NEXT_PUBLIC_POSTHOG_KEY` | PostHog | `apps/web` |
+| `WORKER_URL` | Internal | `apps/web` → points to `apps/workers` |
