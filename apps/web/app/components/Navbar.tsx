@@ -24,10 +24,10 @@ const SHRINK_DISTANCE = 120;
 const MOBILE_MENU_VARIANT: MobileMenuVariant = "curtain";
 
 const NAV_LINKS = [
-  { label: "Flights", href: "/flights" },
-  { label: "Hotels", href: "/hotels" },
-  { label: "Tours", href: "/tours" },
-  { label: "Study Abroad", href: "/study-abroad" },
+  { label: "Flights", href: "#" },
+  { label: "Hotels", href: "#" },
+  { label: "Tours", href: "#" },
+  { label: "Study Abroad", href: "#" },
 ];
 
 function lerp(from: number, to: number, t: number) {

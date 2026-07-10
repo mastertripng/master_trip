@@ -267,3 +267,16 @@ export const supportChatsRelations = relations(supportChats, ({ one }) => ({
     references: [users.id]
   })
 }));
+
+// ─────────────────────────────────────────────
+// AI CONFIGURATION
+// ─────────────────────────────────────────────
+
+export const aiConfigs = pgTable("ai_configs", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  agentName: text("agent_name").notNull().unique(), // e.g. 'fulfillment-agent', 'support-agent'
+  provider: text("provider").default("openrouter").notNull(),
+  modelName: text("model_name").notNull(), // e.g. 'openai/gpt-4o', 'anthropic/claude-3.5-sonnet'
+  isActive: boolean("is_active").default(true).notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+});

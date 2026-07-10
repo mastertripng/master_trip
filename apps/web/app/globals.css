@@ -127,9 +127,19 @@ body {
 @media (prefers-reduced-motion: reduce) {
   .animate-intro-logo-in,
   .animate-intro-plane-idle,
-  .animate-navbar-slide-in {
+  .animate-navbar-slide-in,
+  .animate-float {
     animation: none;
   }
+}
+
+@keyframes float {
+  0%, 100% { transform: translateY(0px) rotate(-5deg); }
+  50%       { transform: translateY(-12px) rotate(5deg); }
+}
+
+.animate-float {
+  animation: float 3s ease-in-out infinite;
 }
 
 /*

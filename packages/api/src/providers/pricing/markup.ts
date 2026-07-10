@@ -62,40 +62,36 @@ async function resolveMarkupRule(params: {
   cabinClass?: string;
   userTier?: string;
 }) {
-  return db.markupRule.findFirst({
-    where: {
-      isActive: true,
-      OR: [
-        // Most specific: exact route + cabin + tier
-        {
-          vertical: params.vertical as any,
-          origin: params.origin,
-          destination: params.destination,
-          cabinClass: params.cabinClass ?? null,
-          userTier: (params.userTier as any) ?? null,
-        },
-        // Route-level rule
-        {
-          vertical: params.vertical as any,
-          origin: params.origin,
-          destination: params.destination,
-          cabinClass: null,
-          userTier: null,
-        },
-        // Vertical-level rule (all flights)
-        {
-          vertical: params.vertical as any,
-          origin: null,
-          destination: null,
-        },
-        // Global catch-all
-        {
-          vertical: null,
-          origin: null,
-          destination: null,
-        },
-      ],
-    },
-    orderBy: { priority: "desc" },
+  return db.query.markupRules.findFirst({
+    where: (rules, { and, eq, or, isNull }) => and(
+      eq(rules.isActive, true),
+      or(
+        and(
+          eq(rules.vertical, params.vertical as any),
+          eq(rules.origin, params.origin),
+          eq(rules.destination, params.destination),
+          params.cabinClass ? eq(rules.cabinClass, params.cabinClass) : isNull(rules.cabinClass),
+          params.userTier ? eq(rules.userTier, params.userTier as any) : isNull(rules.userTier)
+        ),
+        and(
+          eq(rules.vertical, params.vertical as any),
+          eq(rules.origin, params.origin),
+          eq(rules.destination, params.destination),
+          isNull(rules.cabinClass),
+          isNull(rules.userTier)
+        ),
+        and(
+          eq(rules.vertical, params.vertical as any),
+          isNull(rules.origin),
+          isNull(rules.destination)
+        ),
+        and(
+          isNull(rules.vertical),
+          isNull(rules.origin),
+          isNull(rules.destination)
+        )
+      )
+    ),
+    orderBy: (rules, { desc }) => [desc(rules.priority)],
   });
 }
