@@ -1,0 +1,57 @@
+<svg width="676" height="369" viewBox="0 0 676 369" fill="none" xmlns="http://www.w3.org/2000/svg" role="img" aria-labelledby="mastertripTitle">
+  <title id="mastertripTitle">Mastertrip Travels</title>
+  <defs>
+    <filter id="softShadow" x="-20%" y="-20%" width="140%" height="140%">
+      <feDropShadow dx="2" dy="3" stdDeviation="2.2" flood-color="#000000" flood-opacity="0.28"/>
+    </filter>
+    <radialGradient id="globeGrad" cx="38%" cy="32%" r="75%">
+      <stop offset="0%" stop-color="#f2f3f4"/>
+      <stop offset="55%" stop-color="#d3d5d6"/>
+      <stop offset="100%" stop-color="#a9acae"/>
+    </radialGradient>
+    <linearGradient id="swooshGrad" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="#8f2a26"/>
+      <stop offset="55%" stop-color="#c1382f"/>
+      <stop offset="100%" stop-color="#d94a3a"/>
+    </linearGradient>
+    <clipPath id="globeClip">
+      <circle cx="385" cy="98" r="46"/>
+    </clipPath>
+  </defs>
+
+  <g filter="url(#softShadow)">
+    <!-- Globe -->
+    <g clip-path="url(#globeClip)">
+      <circle cx="385" cy="98" r="46" fill="url(#globeGrad)"/>
+      <!-- landmasses -->
+      <g fill="#8a8d90" opacity="0.75">
+        <path d="M358 70c6-4 14-3 18 1 3 3 1 7-3 8-5 1-9 5-15 3-6-2-6-9 0-12z"/>
+        <path d="M392 62c7-2 15 1 17 6 2 4-2 8-7 7-6-1-9-6-14-8-3-2-1-4 4-5z"/>
+        <path d="M370 96c8-3 18 0 23 6 3 4-1 9-7 8-7-1-12 2-18-1-6-3-4-10 2-13z"/>
+        <path d="M408 92c5-1 11 2 12 7 1 4-3 7-8 6-4-1-7-4-9-8-1-3 1-5 5-5z"/>
+        <path d="M352 118c6-2 13 1 14 6 1 4-3 7-8 6-5-1-8-4-9-8-1-2 1-3 3-4z"/>
+      </g>
+      <!-- meridians -->
+      <g stroke="#6f7274" stroke-width="1.6" fill="none" opacity="0.85">
+        <path d="M385 52c-18 12-18 64 0 92"/>
+        <path d="M385 52c18 12 18 64 0 92"/>
+        <path d="M339 98h92"/>
+        <path d="M344 76c22 10 46 10 82 0"/>
+        <path d="M344 120c22-10 46-10 82 0"/>
+      </g>
+      <circle cx="385" cy="98" r="46" fill="none" stroke="#58595b" stroke-width="1.5" opacity="0.5"/>
+    </g>
+
+    <!-- Red swoosh sweeping from under the globe -->
+    <path d="M302 112c34 30 96 34 168 -6 -46 22 -100 24 -140 2 -14 -8 -22 -16 -28 -26 -3 -5 -3 -5 0 30z" fill="url(#swooshGrad)"/>
+    <path d="M295 108c30 34 100 40 178 -10 -50 26 -108 30 -150 6 -16 -9 -25 -19 -32 -30 -3 -5 0 24 4 34z" fill="url(#swooshGrad)"/>
+
+    <!-- Wordmark -->
+    <g font-family="Arial, Helvetica, sans-serif" font-weight="900">
+      <text x="60" y="248" font-size="108" fill="#2e3092" letter-spacing="-2">Master</text>
+      <text x="432" y="248" font-size="108" font-style="italic" fill="#c1382f" letter-spacing="-2">trip</text>
+    </g>
+
+    <text x="142" y="292" font-family="Arial, Helvetica, sans-serif" font-weight="700" font-size="30" letter-spacing="9" fill="#141414">TRAVELS</text>
+  </g>
+</svg>
