@@ -4,25 +4,27 @@
   "private": true,
   "description": "Mastra AI agent and async fulfillment workers (deployed on Fly.io)",
   "scripts": {
-    "dev": "bun --watch src/server.ts",
-    "build": "mastra build",
-    "start": "bun src/server.ts",
+    "dev": "tsx watch src/server.ts",
+    "build": "tsc",
+    "start": "node dist/server.js",
     "type-check": "tsc --noEmit",
     "lint": "eslint . --max-warnings 0"
   },
   "dependencies": {
-    "@mastra/core": "^0.10.0",
     "@master-trip/db": "workspace:*",
     "@master-trip/types": "workspace:*",
+    "@mastra/core": "^0.10.0",
     "@orpc/server": "^0.35.0",
     "hono": "^4.6.0",
     "openai": "^4.56.0",
     "zod": "^3.23.8"
   },
   "devDependencies": {
+    "@ai-sdk/openai": "^4.0.9",
     "@repo/eslint-config": "workspace:*",
     "@repo/typescript-config": "workspace:*",
     "@types/node": "^22.0.0",
+    "mastra": "^1.18.2",
     "typescript": "^5.6.3"
   }
 }

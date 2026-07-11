@@ -9,12 +9,11 @@
 ```
 master-trip/
 ├── apps/
-│   ├── web/          → Next.js 16 (App Router) — Vercel (Public)
-│   ├── admin/        → Next.js 16 (App Router) — Vercel (Internal / Cloudflare Access)
-│   └── workers/      → Bun + Hono + Mastra — Fly.io
+│   ├── web/          → Next.js 16 (App Router) — Vercel (Frontend UI + Main Backend API)
+│   └── workers/      → Bun + Hono + Mastra — Fly.io (Async Worker Backend & AI Agent)
 ├── packages/
 │   ├── api/          → oRPC routers, adapters, aggregators (framework-agnostic)
-│   ├── db/           → Prisma schema + client (Supabase PostgreSQL)
+│   ├── db/           → Drizzle ORM schema + client (Supabase PostgreSQL)
 │   ├── types/        → Zod validation schemas (shared contract)
 │   ├── ui/           → Shared React component library
 │   └── eslint-config / typescript-config
@@ -25,14 +24,14 @@ master-trip/
 
 ## Apps
 
-### `apps/web` — Next.js Frontend (Public Portal)
+### `apps/web` — Next.js App (Frontend UI + Main Backend API)
 | Property | Detail |
 |---|---|
 | Framework | Next.js 16 (App Router) |
 | Deploys to | Vercel (Serverless / Edge CDN) |
 | Port (local) | `3000` |
 | Communicates via | oRPC React Query client → `apps/workers` |
-| Auth | Magic Link (guest checkout) |
+| Auth | Unified Auth (Magic Link for guests, SAML/SSO for Admin/Ops via WorkOS) |
 | Never does | Direct DB queries, raw provider API calls |
 
 **Route Groups:**
@@ -48,34 +47,17 @@ apps/web/app/
 │   ├── cart/                    ← Unified trip cart (all verticals)
 │   ├── checkout/                ← Paystack payment init + confirmation
 │   └── support/                 ← AI chat + realtime human handoff
-```
-
----
-
-### `apps/admin` — Internal Operations Dashboard
-| Property | Detail |
-|---|---|
-| Framework | Next.js 16 (App Router) |
-| Deploys to | Vercel (Separate Project / `ops.master-trip.com`) |
-| Network Security | Cloudflare Access (Zero Trust Network Access) |
-| Auth | WorkOS (SAML/SSO for B2B) |
-| Port (local) | `3001` |
-| Communicates via | oRPC React Query client → `apps/workers` |
-
-**Routes:**
-
-```
-apps/admin/app/
 │
-├── support/                 ← Support queue + human takeover
-├── bookings/                ← Full trip lifecycle management
-├── fulfillment/             ← QStash job monitor + DLQ intervention
-├── markup/                  ← Markup rules CRUD engine
-├── finance/                 ← Paystack splits + Flutterwave VCC
-├── ai-ops/                  ← OpenRouter cost + agent KPIs
-├── knowledge/               ← pgvector policy document manager
-├── analytics/               ← Revenue, funnel, routes, retention
-└── users/                   ← User management + WorkOS SSO orgs
+├── (admin)/                     ← Internal Operations Dashboard (ADMIN / OPERATIONS roles)
+│   ├── support/                 ← Support queue + human takeover
+│   ├── bookings/                ← Full trip lifecycle management
+│   ├── fulfillment/             ← QStash job monitor + DLQ intervention
+│   ├── markup/                  ← Markup rules CRUD engine
+│   ├── finance/                 ← Paystack splits + Flutterwave VCC
+│   ├── ai-ops/                  ← OpenRouter cost + agent KPIs
+│   ├── knowledge/               ← pgvector policy document manager
+│   ├── analytics/               ← Revenue, funnel, routes, retention
+│   └── users/                   ← User management + WorkOS SSO orgs
 ```
 
 ---
@@ -166,13 +148,13 @@ for (const api of sorted) {
 
 ---
 
-### `packages/db` — Database (Prisma + Supabase)
+### `packages/db` — Database (Drizzle ORM + Supabase)
 | Property | Detail |
 |---|---|
-| ORM | Prisma |
+| ORM | Drizzle ORM |
 | Database | PostgreSQL (hosted on Supabase) |
 | Extensions | `pgvector` (RAG for AI support agent) |
-| Hard rule | All schema changes via `schema.prisma` + `pnpm db:push`. Never raw SQL on Supabase. |
+| Hard rule | All schema changes via `src/schema.ts` + `drizzle-kit push`. Never raw SQL on Supabase. |
 
 **Core Models:**
 
@@ -224,8 +206,7 @@ Shared React components (buttons, cards, tables, modals) used by both the custom
 | **Hotels** | Booking.com API | Reliable lodging — reservation guaranteed in hotel's system |
 | **Payments (B2C)** | Paystack | Customer checkout — captures full trip amount |
 | **Payments (B2B)** | Flutterwave Issuing | Virtual Credit Cards (VCC) to pay provider APIs per booking |
-| **Zero Trust** | Cloudflare Access | Protects `apps/admin` from the public internet entirely |
-| **Auth** | WorkOS | SAML/SSO for corporate clients and internal ops |
+| **Auth** | WorkOS | SAML/SSO for corporate clients and internal ops (Admin) |
 | **AI LLM Routing** | OpenRouter | Unified API — swap GPT-4o / Claude / open-source. Prevents vendor lock-in |
 | **Emails** | Resend | Transactional — e-tickets, itineraries, deal blast alerts, magic links |
 | **File Uploads** | UploadThing | Passport / ID document uploads (serverless, zero infra) |
@@ -268,8 +249,8 @@ enum UserRole {
 | Layer | Mechanism | Effect |
 |---|---|---|
 | **1. Backend** | oRPC procedure middleware checks `context.userRole` | `403 FORBIDDEN` if role insufficient |
-| **2. Network / Frontend** | Cloudflare Access blocks public internet + Next.js middleware enforces specific role checks | ZTNA block / redirect |
-| **3. Database** | Prisma middleware appends `where: { userId }` to all queries | No cross-user data leak, even if layers 1 & 2 fail |
+| **2. Frontend** | Next.js middleware blocks access to `(admin)/*` based on Auth session role | Redirect to 403 / Login |
+| **3. Database** | Drizzle filters appends `where eq(userId, ...)` to all customer queries | No cross-user data leak |
 
 ---
 
@@ -328,7 +309,7 @@ User sends message in support chat on apps/web
     → oRPC supportRouter.sendMessage → saved to SupportChat (role: USER)
     → QStash: emit support job with userId context
     → apps/workers: Mastra supportAgent
-        → Prisma (userId-isolated): load user's full Trip + TripItems
+        → Drizzle (userId-isolated): load user's full Trip + TripItems
         → pgvector RAG: search airline/visa policy database for relevant rules
         → OpenRouter: send context + policy + user message to LLM (GPT-4o)
         → AI response saved to SupportChat (role: ASSISTANT)
@@ -351,19 +332,9 @@ flowchart TD
         WEB["apps/web\nNext.js 16\nCustomer Portal"]
     end
 
-    subgraph VercelAdmin["Vercel (Internal)"]
-        ADMIN["apps/admin\nNext.js 16\nOperations Dashboard"]
-    end
-
-    CLOUDFLARE{"Cloudflare Access\n(Zero Trust Proxy)"}
-
-    subgraph FlyIO["Fly.io (Always-On Container)"]
-        WORKERS["apps/workers\nBun + Hono\nAPI Server + Mastra AI"]
-    end
-
     subgraph Packages["Turborepo Shared Packages"]
         API["packages/api\noRPC Routers\nAdapters + Aggregators"]
-        DB["packages/db\nPrisma Client"]
+        DB["packages/db\nDrizzle ORM"]
         TYPES["packages/types\nZod Schemas"]
     end
 
@@ -391,10 +362,8 @@ flowchart TD
     end
 
     WEB -- "oRPC via HTTP" --> WORKERS
-    CLOUDFLARE -- "Authenticated Traffic" --> ADMIN
-    ADMIN -- "oRPC via HTTP" --> WORKERS
     WEB -. "Analytics" .-> POSTHOG
-    ADMIN -. "Auth" .-> WORKOS
+    WEB -. "Admin Auth" .-> WORKOS
     WORKERS --> API
     WORKERS --> DB
     WORKERS -. "Types" .-> TYPES
@@ -423,7 +392,7 @@ flowchart TD
 | Business logic | `packages/api/src/` | All provider integrations, oRPC endpoints, aggregators |
 | No HTTP code in api | `packages/api/src/` | Zero `req`/`res`/Hono/Express. Pure TypeScript only |
 | UI code | `apps/web/app/` | React/Next.js only. No DB queries, no raw API calls |
-| DB changes | `packages/db/prisma/schema.prisma` | Always through Prisma. Never alter Supabase directly |
+| DB changes | `packages/db/src/schema.ts` | Always through Drizzle. Never alter Supabase directly |
 | Request coalescing | `packages/api/src/providers/*/aggregator.ts` | Dedup logic here, not in Hono server |
 | Auto-scaling | `apps/workers/fly.toml` | Infra config lives here only |
 | Type contracts | `packages/types/src/` | All shared Zod schemas. Frontend and backend use same types |
@@ -445,8 +414,7 @@ cd packages/db && pnpm db:push
 
 # 4. Run everything
 pnpm dev
-# → apps/web     on http://localhost:3000
-# → apps/admin   on http://localhost:3001
+# → apps/web     on http://localhost:3000 (Customer & Admin)
 # → apps/workers on http://localhost:8080
 ```
 

@@ -2,27 +2,28 @@
   "name": "@master-trip/db",
   "version": "0.1.0",
   "private": true,
-  "description": "Prisma database client and schema — shared across all apps",
+  "description": "Drizzle database client and schema — shared across all apps",
   "exports": {
     ".": "./src/index.ts"
   },
   "scripts": {
-    "db:generate": "prisma generate",
-    "db:migrate": "prisma migrate dev",
-    "db:push": "prisma db push",
-    "db:studio": "prisma studio",
+    "db:generate": "drizzle-kit generate",
+    "db:migrate": "drizzle-kit migrate",
+    "db:push": "drizzle-kit push",
+    "db:studio": "drizzle-kit studio",
     "db:seed": "tsx src/seed.ts",
     "type-check": "tsc --noEmit"
   },
   "dependencies": {
-    "@prisma/client": "^5.20.0",
+    "drizzle-orm": "^0.43.0",
+    "postgres": "^3.4.4",
     "zod": "^3.23.8"
   },
   "devDependencies": {
-    "@prisma/config": "^7.8.0",
     "@repo/typescript-config": "workspace:*",
     "@types/node": "^20.0.0",
-    "prisma": "^5.20.0",
+    "dotenv": "^16.4.0",
+    "drizzle-kit": "^0.31.0",
     "tsx": "^4.19.0",
     "typescript": "^5.6.3"
   }

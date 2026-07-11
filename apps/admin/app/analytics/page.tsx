@@ -1,8 +1,0 @@
-export default function AnalyticsPage() {
-  return (
-    <div className="p-8">
-      <h1 className="text-2xl font-bold">Analytics & Reporting</h1>
-      <p>Revenue, funnel, and retention data.</p>
-    </div>
-  );
-}

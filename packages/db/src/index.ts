@@ -1,18 +1,16 @@
-import { PrismaClient } from "@prisma/client";
+import { drizzle } from 'drizzle-orm/postgres-js';
+import postgres from 'postgres';
+import * as schema from './schema';
 
-const globalForPrisma = globalThis as unknown as {
-  prisma: PrismaClient | undefined;
-};
+const connectionString = process.env.DATABASE_URL;
 
-export const db =
-  globalForPrisma.prisma ??
-  new PrismaClient({
-    log:
-      process.env.NODE_ENV === "development"
-        ? ["query", "error", "warn"]
-        : ["error"],
-  });
+if (!connectionString) {
+  throw new Error("DATABASE_URL is not set");
+}
 
-if (process.env.NODE_ENV !== "production") globalForPrisma.prisma = db;
+// Disable prefetch as it is not supported for "Transaction" pool mode
+const client = postgres(connectionString, { prepare: false });
 
-export * from "@prisma/client";
+export const db = drizzle(client, { schema });
+export * from './schema';
+export { eq } from 'drizzle-orm';

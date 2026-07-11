@@ -1,4 +1,10 @@
 import { Agent } from "@mastra/core";
+import { createOpenAI } from "@ai-sdk/openai";
+
+const openrouter = createOpenAI({
+  baseURL: "https://openrouter.ai/api/v1",
+  apiKey: process.env.OPENROUTER_API_KEY || "",
+});
 
 /**
  * AI Support Agent
@@ -22,9 +28,18 @@ export const supportAgent = new Agent({
     
     You CANNOT access other users' bookings under any circumstances.
   `,
-  model: {
-    provider: "OPEN_AI", // Routed via OpenRouter
-    name: "gpt-4o", // Must specify name
+  model: async ({ runtimeContext }) => {
+    const { db, aiConfigs, eq } = await import("@master-trip/db");
+
+    // 2. Fetch the active model config for this agent
+    const config = await db.query.aiConfigs.findFirst({
+      where: eq(aiConfigs.agentName, "support-agent"),
+    });
+
+    // 3. Fallback to process.env or default
+    const modelName = config?.modelName || process.env.MASTRA_MODEL_NAME || "openai/gpt-4o";
+    
+    return openrouter(modelName) as any;
   },
   tools: {},
 });
