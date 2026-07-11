@@ -4,6 +4,18 @@
   "tasks": {
     "build": {
       "dependsOn": ["^build"],
+      "env": [
+        "DATABASE_URL",
+        "WORKOS_CLIENT_ID",
+        "WORKOS_API_KEY",
+        "WORKOS_COOKIE_PASSWORD",
+        "NEXT_PUBLIC_WORKOS_REDIRECT_URI",
+        "BOOKING_COM_API_KEY",
+        "BOOKING_COM_AFFILIATE_ID",
+        "TRAVELS_247_API_KEY",
+        "TRAVELS_247_BASE_URL",
+        "NEXT_PUBLIC_SITE_URL"
+      ],
       "inputs": ["$TURBO_DEFAULT$", ".env*"],
       "outputs": [".next/**", "!.next/cache/**", "!.next/dev/**"]
     },
