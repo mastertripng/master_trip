@@ -9,8 +9,8 @@
 ```
 master-trip/
 ├── apps/
-│   ├── web/          → Next.js 16 (App Router) — Vercel (Unified Portal + Admin)
-│   └── workers/      → Bun + Hono + Mastra — Fly.io
+│   ├── web/          → Next.js 16 (App Router) — Vercel (Frontend UI + Main Backend API)
+│   └── workers/      → Bun + Hono + Mastra — Fly.io (Async Worker Backend & AI Agent)
 ├── packages/
 │   ├── api/          → oRPC routers, adapters, aggregators (framework-agnostic)
 │   ├── db/           → Drizzle ORM schema + client (Supabase PostgreSQL)
@@ -24,7 +24,7 @@ master-trip/
 
 ## Apps
 
-### `apps/web` — Next.js Frontend (Unified Customer Portal & Operations Dashboard)
+### `apps/web` — Next.js App (Frontend UI + Main Backend API)
 | Property | Detail |
 |---|---|
 | Framework | Next.js 16 (App Router) |
