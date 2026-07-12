@@ -21,6 +21,17 @@ The frontend communicates exclusively via the **oRPC React Query client**. The r
 *   **Support (`orpc.support.*`)**:
     *   `.sendMessage`: Sends messages to the Mastra AI RAG agent.
     *   `.getChatHistory`: Fetches the user's isolated chat logs.
+*   **User (`orpc.user.*`)**:
+    *   `.getProfile` / `.updateProfile`: Self-service account management.
+    *   `.listTravelers` / `.addTraveler` / `.updateTraveler`: Management for saved passenger details.
+    *   `.listMyTrips`: Fetches the user's past booking history.
+    *   `.deleteAccount`: GDPR-compliant full account removal.
+*   **Admin (`orpc.admin.*`)**:
+    *   `.getEscalatedChats` / `.replyToUser`: Live human support tools.
+    *   `.listMarkupRules` / `.createMarkupRule`: Dynamic pricing engine UI.
+    *   `.getRevenueOverview` / `.initiateRefund`: Financial dashboards and Paystack refund processing.
+    *   `.listPolicies` / `.createPolicy`: RAG embeddings manager (updates pgvector).
+    *   `.listAiConfigs` / `.updateAiConfig`: Hot-swapping AI models for active agents.
 
 ---
 
@@ -101,7 +112,7 @@ This outlines how a new promotion goes from creation by the operations team to a
 ### Phase 3: Action (The Customer Books)
 1.  **The Click:** The customer clicks the "Weekend in Dubai" card.
 2.  **The Invisible Route:** The Next.js router seamlessly transitions the user to the Hotels Search page, invisibly passing the "Dubai" parameters.
-3.  **The Live Search:** The search page immediately fires an `oRPC` request to the `apps/workers` backend.
+3.  **The Live Search:** The search page immediately fires a `oRPC` request to the `apps/workers` backend.
 4.  **Aggregator Fires:** The backend fetches live hotel availability for Dubai from external APIs (like Booking.com), applies profit markup, and returns the prices to the user's screen.
 5.  **Checkout & Fulfillment:** The user adds the selection to their Unified Cart, checks out via Paystack, and QStash triggers the background AI worker to secure the official reservation.
 

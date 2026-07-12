@@ -2,6 +2,8 @@ import { z } from "zod";
 import { protectedProcedure } from "../procedures";
 import { db, supportChats } from "@master-trip/db";
 import { eq, asc } from "drizzle-orm";
+import { qstash } from "../qstash";
+import { publishChatMessage } from "../pubsub";
 
 export const supportRouter = {
   /**
@@ -11,7 +13,7 @@ export const supportRouter = {
   sendMessage: protectedProcedure
     .input(z.object({ message: z.string().min(1).max(2000) }))
     .handler(async ({ input, context }) => {
-      // Persist the user's message
+      // 1. Persist the user's message
       await db.insert(supportChats).values({
         userId: context.userId,
         role: "USER",
@@ -19,12 +21,23 @@ export const supportRouter = {
         status: "ACTIVE",
       });
 
-      // TODO: Publish to QStash → triggers Mastra support-agent with userId context
+      // 2. Broadcast real-time event so the admin sees it instantly
+      await publishChatMessage({
+        type: "chat:new_message",
+        userId: context.userId,
+        role: "USER",
+        message: input.message,
+        createdAt: new Date().toISOString(),
+      });
+
+      // 3. Publish to QStash → triggers Mastra support-agent with userId context
       // Agent reads only THIS user's trips via Drizzle userId filter
-      // await qstash.publishJSON({
-      //   url: process.env.WORKER_SUPPORT_URL,
-      //   body: { userId: context.userId, message: input.message },
-      // });
+      if (qstash && process.env.WORKER_SUPPORT_URL) {
+        await qstash.publishJSON({
+          url: process.env.WORKER_SUPPORT_URL,
+          body: { userId: context.userId, message: input.message },
+        });
+      }
 
       return { queued: true };
     }),

@@ -7,9 +7,20 @@ import {
   decimal,
   json,
   boolean,
-  integer
+  integer,
+  customType,
+  index
 } from "drizzle-orm/pg-core";
-import { relations } from "drizzle-orm";
+import { relations, sql } from "drizzle-orm";
+
+const vector = customType<{ data: number[]; driverData: string }>({
+  dataType(config: any) {
+    return `vector(${config?.dimensions || 1536})`;
+  },
+  toDriver(value) {
+    return `[${value.join(",")}]`;
+  },
+});
 
 // ─────────────────────────────────────────────
 // ENUMS
@@ -279,4 +290,17 @@ export const aiConfigs = pgTable("ai_configs", {
   modelName: text("model_name").notNull(), // e.g. 'openai/gpt-4o', 'anthropic/claude-3.5-sonnet'
   isActive: boolean("is_active").default(true).notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
+});
+
+// ─────────────────────────────────────────────
+// TRAVEL POLICIES (RAG / pgvector)
+// ─────────────────────────────────────────────
+
+export const travelPolicies = pgTable("travel_policies", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  provider: text("provider").notNull(), // e.g., 'Emirates', 'Booking.com', 'Internal'
+  category: text("category").notNull(), // e.g., 'Baggage', 'Cancellation', 'Visa'
+  content: text("content").notNull(),
+  embedding: vector("embedding", { dimensions: 1536 }),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
 });

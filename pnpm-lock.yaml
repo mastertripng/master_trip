@@ -34,7 +34,7 @@ importers:
         version: 0.35.1(hono@4.12.27)(next@16.2.0(@opentelemetry/api@1.9.1)(react-dom@19.2.0(react@19.2.0))(react@19.2.0))
       '@workos-inc/authkit-nextjs':
         specifier: ^4.2.0
-        version: 4.2.0(@workos-inc/node@10.7.0)(next@16.2.0(@opentelemetry/api@1.9.1)(react-dom@19.2.0(react@19.2.0))(react@19.2.0))(react-dom@19.2.0(react@19.2.0))(react@19.2.0)(typescript@5.9.2)
+        version: 4.2.0(@workos-inc/node@10.7.0)(next@16.2.0(@babel/core@7.29.7)(@opentelemetry/api@1.9.1)(react-dom@19.2.0(react@19.2.0))(react@19.2.0))(react-dom@19.2.0(react@19.2.0))(react@19.2.0)(typescript@5.9.2)
       gsap:
         specifier: ^3.15.0
         version: 3.15.0
@@ -84,6 +84,9 @@ importers:
 
   apps/workers:
     dependencies:
+      '@master-trip/api':
+        specifier: workspace:*
+        version: link:../../packages/api
       '@master-trip/db':
         specifier: workspace:*
         version: link:../../packages/db
@@ -96,6 +99,12 @@ importers:
       '@orpc/server':
         specifier: ^0.35.0
         version: 0.35.1(hono@4.12.27)(next@16.2.0(@opentelemetry/api@1.9.1)(react-dom@19.2.0(react@19.2.0))(react@19.2.0))
+      '@upstash/qstash':
+        specifier: ^2.7.0
+        version: 2.11.1
+      '@upstash/redis':
+        specifier: ^1.34.0
+        version: 1.38.0
       hono:
         specifier: ^4.6.0
         version: 4.12.27
@@ -139,6 +148,9 @@ importers:
       '@orpc/server':
         specifier: ^0.35.0
         version: 0.35.1(hono@4.12.27)(next@16.2.0(@opentelemetry/api@1.9.1)(react-dom@19.2.0(react@19.2.0))(react@19.2.0))
+      '@upstash/qstash':
+        specifier: ^2.7.3
+        version: 2.11.1
       '@upstash/redis':
         specifier: ^1.34.0
         version: 1.38.0
@@ -2302,6 +2314,9 @@ packages:
     resolution: {integrity: sha512-Xzmnb58+Db78gT/CCj/PVCvK+zxbnsw6F+O1oheYszJbBSdEjVhQi3C/Xttzxgi/GLmpvOggRs1RFpiJ8+c34Q==}
     engines: {node: ^18.18.0 || ^20.9.0 || >=21.1.0}
 
+  '@upstash/qstash@2.11.1':
+    resolution: {integrity: sha512-rq8e/40lgWThlfMZUsOUtABW6gZ+dzrl+CjESmHE8oL6l7hUp2kK1bni1auNBjxz5cpHqPheFlVqufNXbK+cVg==}
+
   '@upstash/redis@1.38.0':
     resolution: {integrity: sha512-wu+dZBptlLy0+MCUEoHmzrY/TnmgDey3+c7EbIGwrLqAvkP8yi5MWZHYGIFtAygmL4Bkz2TdFu+eU0vFPncIcg==}
 
@@ -2689,6 +2704,9 @@ packages:
   cross-spawn@7.0.6:
     resolution: {integrity: sha512-uV2QOWP2nWzsy2aMp8aRibhi9dlzF5Hgh5SHaB9OiTGEyDTiJJyx0uy51QXdyWbtAHNua4XJzUKca3OzKUd3vA==}
     engines: {node: '>= 8'}
+
+  crypto-js@4.2.0:
+    resolution: {integrity: sha512-KALDyEYgpY+Rlob/iriUtjV6d5Eq+Y191A5g4UqLAi8CyGP9N1+FdVbkc1SxKc2r4YAYqG8JzO2KGL+AizD70Q==}
 
   csstype@3.1.3:
     resolution: {integrity: sha512-M1uQkMl8rQK/szD0LNhtqxIPLpimGm8sOBwU7lLnCpSbTyY3yeU1Vc7l4KT5zT4s/yOxHH5O7tIuuLOCnLADRw==}
@@ -3866,6 +3884,10 @@ packages:
   negotiator@0.6.4:
     resolution: {integrity: sha512-myRT3DiWPHqho5PrJaIRyaMv2kgYf0mUVgBNOYMuCH5Ki1yEiQaf/ZJuQ62nvpc44wL5WDbTX7yGJi1Neevw8w==}
     engines: {node: '>= 0.6'}
+
+  neverthrow@7.2.0:
+    resolution: {integrity: sha512-iGBUfFB7yPczHHtA8dksKTJ9E8TESNTAx1UQWW6TzMF280vo9jdPYpLUXrMN1BCkPdHFdNG3fxOt2CUad8KhAw==}
+    engines: {node: '>=18'}
 
   next@16.2.0:
     resolution: {integrity: sha512-NLBVrJy1pbV1Yn00L5sU4vFyAHt5XuSjzrNyFnxo6Com0M0KrL6hHM5B99dbqXb2bE9pm4Ow3Zl1xp6HVY9edQ==}
@@ -6878,13 +6900,19 @@ snapshots:
       '@typescript-eslint/types': 8.50.0
       eslint-visitor-keys: 4.2.1
 
+  '@upstash/qstash@2.11.1':
+    dependencies:
+      crypto-js: 4.2.0
+      jose: 5.10.0
+      neverthrow: 7.2.0
+
   '@upstash/redis@1.38.0':
     dependencies:
       uncrypto: 0.1.3
 
   '@workflow/serde@4.1.0': {}
 
-  '@workos-inc/authkit-nextjs@4.2.0(@workos-inc/node@10.7.0)(next@16.2.0(@opentelemetry/api@1.9.1)(react-dom@19.2.0(react@19.2.0))(react@19.2.0))(react-dom@19.2.0(react@19.2.0))(react@19.2.0)(typescript@5.9.2)':
+  '@workos-inc/authkit-nextjs@4.2.0(@workos-inc/node@10.7.0)(next@16.2.0(@babel/core@7.29.7)(@opentelemetry/api@1.9.1)(react-dom@19.2.0(react@19.2.0))(react@19.2.0))(react-dom@19.2.0(react@19.2.0))(react@19.2.0)(typescript@5.9.2)':
     dependencies:
       '@sindresorhus/fnv1a': 3.1.0
       '@workos-inc/node': 10.7.0
@@ -7275,6 +7303,8 @@ snapshots:
       path-key: 3.1.1
       shebang-command: 2.0.0
       which: 2.0.2
+
+  crypto-js@4.2.0: {}
 
   csstype@3.1.3: {}
 
@@ -8476,6 +8506,8 @@ snapshots:
   natural-compare@1.4.0: {}
 
   negotiator@0.6.4: {}
+
+  neverthrow@7.2.0: {}
 
   next@16.2.0(@babel/core@7.29.7)(@opentelemetry/api@1.9.1)(react-dom@19.2.0(react@19.2.0))(react@19.2.0):
     dependencies:
