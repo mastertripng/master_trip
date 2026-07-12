@@ -1,3 +1,4 @@
+// @ts-ignore - paystack-api does not have published types
 import Paystack from "paystack-api";
 
 /**
