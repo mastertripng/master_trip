@@ -84,16 +84,13 @@ app.post("/webhook/fulfillment", async (c) => {
 
     console.log("[Fulfillment] Received event for Trip:", payload.tripId);
 
-    const agent = mastra.getAgent("fulfillmentAgent");
-    if (agent) {
-      // Fire-and-forget: fulfillment can take minutes, we ACK QStash immediately
-      agent
-        .generate(
-          `Fulfill all trip items for tripId: ${payload.tripId}. UserId: ${payload.userId}`,
-          { runId: payload.tripId }
-        )
-        .catch((err) => console.error("[Fulfillment] Agent error:", err));
-    }
+    // Import the strict deterministic processor
+    const { processFulfillment } = await import("./agents/fulfillment.js");
+    
+    // Fire-and-forget: fulfillment can take minutes, we ACK QStash immediately
+    processFulfillment(payload.tripId, payload.userId).catch((err: any) => 
+      console.error("[Fulfillment] Background Job error:", err)
+    );
 
     return c.json({ received: true, tripId: payload.tripId });
   } catch (error) {
@@ -149,6 +146,81 @@ app.post("/webhook/support", async (c) => {
     return c.json({ received: true });
   } catch (error) {
     console.error("[Support] Webhook error:", error);
+    return c.json({ error: "Invalid payload" }, 400);
+  }
+});
+
+// ─────────────────────────────────────────────
+// WEBHOOK: Paystack
+// Handles async payment events (e.g. charge.success) to ensure
+// trips are marked PAID even if the client disconnects before confirmCheckout.
+// ─────────────────────────────────────────────
+
+app.post("/webhook/paystack", async (c) => {
+  try {
+    const rawBody = (c.get as any)("rawBody") || await c.req.text();
+    const signature = c.req.header("x-paystack-signature");
+    
+    // In production, verify crypto signature using process.env.PAYSTACK_SECRET_KEY
+    if (process.env.NODE_ENV === "production" && !signature) {
+      return c.json({ error: "Missing signature" }, 401);
+    }
+
+    const payload = JSON.parse(rawBody);
+
+    if (payload.event === "charge.success") {
+      const { reference, metadata, amount, currency } = payload.data;
+      const tripId = metadata?.tripId;
+      const userId = metadata?.userId;
+
+      if (tripId && userId) {
+        console.log(`[Paystack Webhook] Received charge.success for Trip ${tripId}`);
+        const { db, trips, payments, eq } = await import("@master-trip/db");
+        
+        // 1. Verify trip exists and is DRAFT
+        const [trip] = await db.select().from(trips).where(eq(trips.id, tripId)).limit(1);
+        
+        if (trip && trip.status === "DRAFT") {
+           // 2. Mark as PAID
+           await db.update(trips).set({ status: "PAID", updatedAt: new Date() }).where(eq(trips.id, tripId));
+           
+           // 3. Create payment record
+           await db.insert(payments).values({
+             tripId,
+             paystackReference: reference,
+             amount: (amount / 100).toString(),
+             currency,
+             status: "CAPTURED",
+             paidAt: new Date(),
+           });
+
+           // 4. Enqueue fulfillment
+           const { qstash } = await import("@master-trip/api/qstash");
+           if (qstash && process.env.WORKER_FULFILLMENT_URL) {
+             await qstash.publishJSON({
+               url: process.env.WORKER_FULFILLMENT_URL,
+               body: { tripId, userId },
+             });
+           }
+
+           // 5. Notify any lingering frontends that payment was captured
+           const { publishPaymentEvent } = await import("@master-trip/api/pubsub");
+           await publishPaymentEvent({
+             type: "payment:captured",
+             tripId,
+             amount: (amount / 100).toString(),
+             currency,
+             paystackReference: reference,
+           });
+
+           console.log(`[Paystack Webhook] Successfully recovered and enqueued fulfillment for Trip ${tripId}`);
+        }
+      }
+    }
+
+    return c.json({ received: true });
+  } catch (error) {
+    console.error("[Paystack Webhook] Error processing event:", error);
     return c.json({ error: "Invalid payload" }, 400);
   }
 });

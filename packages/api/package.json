@@ -9,7 +9,8 @@
     "./redis": "./src/redis.ts",
     "./pubsub": "./src/pubsub.ts",
     "./qstash": "./src/qstash.ts",
-    "./openapi": "./src/openapi.ts"
+    "./openapi": "./src/openapi.ts",
+    "./paystack": "./src/providers/payments/paystack.adapter.ts"
   },
   "dependencies": {
     "@master-trip/db": "workspace:*",
@@ -20,6 +21,7 @@
     "@upstash/redis": "^1.34.0",
     "drizzle-orm": "^0.43.0",
     "jose": "^6.2.3",
+    "paystack-api": "^2.0.6",
     "zod": "^3.23.8"
   },
   "devDependencies": {
