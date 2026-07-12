@@ -4,6 +4,8 @@ import { hotelRouter } from "./routers/hotels";
 import { tourRouter } from "./routers/tours";
 import { bookingRouter } from "./routers/bookings";
 import { supportRouter } from "./routers/support";
+import { adminRouter } from "./routers/admin";
+import { userRouter } from "./routers/user";
 
 /**
  * Master Trip oRPC Router
@@ -16,6 +18,8 @@ export const appRouter = os.router({
   tours: tourRouter,
   bookings: bookingRouter,
   support: supportRouter,
+  admin: adminRouter,
+  user: userRouter,
 });
 
 export type AppRouter = typeof appRouter;

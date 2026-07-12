@@ -2,6 +2,9 @@ import { z } from "zod";
 import { protectedProcedure } from "../procedures";
 import { db, trips, tripItems, payments } from "@master-trip/db";
 import { eq, and } from "drizzle-orm";
+import { qstash } from "../qstash";
+import { publishPaymentEvent } from "../pubsub";
+import { paystack } from "../providers/payments/paystack.adapter";
 
 /**
  * Zod schema for the checkout confirmation payload.
@@ -58,6 +61,25 @@ export const bookingRouter = {
         throw new Error("Trip not found or access denied");
       }
 
+      // IDEMPOTENCY CHECK: If already paid, return early to prevent double-fulfillment
+      if (existingTrip.status !== "DRAFT") {
+        const [existingPayment] = await db
+          .select()
+          .from(payments)
+          .where(eq(payments.tripId, input.tripId))
+          .limit(1);
+          
+        return { 
+          success: true, 
+          tripId: input.tripId, 
+          paymentId: existingPayment?.id,
+          idempotent: true 
+        };
+      }
+
+      // Verify the transaction with Paystack (throws if failed)
+      const paystackResult = await paystack.verifyTransaction(input.paystackReference);
+
       // Mark trip as PAID
       await db
         .update(trips)
@@ -70,8 +92,8 @@ export const bookingRouter = {
         .values({
           tripId: input.tripId,
           paystackReference: input.paystackReference,
-          amount: input.amount,
-          currency: input.currency,
+          amount: paystackResult.amount.toString(),
+          currency: paystackResult.currency,
           status: "CAPTURED",
           paidAt: new Date(),
         })
@@ -81,11 +103,21 @@ export const bookingRouter = {
         throw new Error("Failed to create payment record");
       }
 
-      // TODO: Publish to QStash → triggers Mastra fulfillment worker
-      // await qstash.publishJSON({
-      //   url: process.env.WORKER_FULFILLMENT_URL,
-      //   body: { tripId: input.tripId, userId: context.userId },
-      // });
+      if (qstash && process.env.WORKER_FULFILLMENT_URL) {
+        await qstash.publishJSON({
+          url: process.env.WORKER_FULFILLMENT_URL,
+          body: { tripId: input.tripId, userId: context.userId },
+        });
+      }
+
+      // 🔴 Real-time: notify customer's checkout page that payment is captured
+      await publishPaymentEvent({
+        type: "payment:captured",
+        tripId: input.tripId,
+        amount: input.amount,
+        currency: input.currency,
+        paystackReference: input.paystackReference,
+      });
 
       return { success: true, tripId: input.tripId, paymentId: payment.id };
     }),

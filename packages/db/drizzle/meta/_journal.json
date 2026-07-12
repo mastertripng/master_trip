@@ -8,6 +8,13 @@
       "when": 1783699990384,
       "tag": "0000_jittery_george_stacy",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1783779477060,
+      "tag": "0001_sturdy_emma_frost",
+      "breakpoints": true
     }
   ]
 }
