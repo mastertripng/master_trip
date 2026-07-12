@@ -1,5 +1,5 @@
-// @ts-ignore - paystack-api does not have published types
-import Paystack from "paystack-api";
+// Remove top-level import to avoid Turbopack module evaluation crashes
+// We will dynamically require it inside the adapter when needed.
 
 /**
  * Paystack Payment Adapter (Refactored using Node SDK)
@@ -9,14 +9,20 @@ import Paystack from "paystack-api";
 
 export class PaystackAdapter {
   private readonly secretKey: string;
-  private readonly client: any; // Instantiated Paystack SDK client
+  private client: any | null = null; // Instantiated lazily
 
   constructor() {
     this.secretKey = process.env.PAYSTACK_SECRET_KEY || "sk_test_mock";
-    
-    // Initialize the Paystack Node SDK
-    // If the key is the mock key, we'll intercept calls manually below
-    this.client = Paystack(this.secretKey);
+  }
+
+  private getClient() {
+    if (!this.client) {
+      // Lazy initialization to avoid Next.js build-time CJS/ESM interop crashes
+      const paystackModule = require("paystack-api");
+      const Paystack = typeof paystackModule === "function" ? paystackModule : (paystackModule.default || paystackModule);
+      this.client = Paystack(this.secretKey);
+    }
+    return this.client;
   }
 
   /**
@@ -35,7 +41,8 @@ export class PaystackAdapter {
     }
 
     try {
-      const response = await this.client.transaction.verify({ reference });
+      const client = this.getClient();
+      const response = await client.transaction.verify({ reference });
 
       return {
         success: response.data.status === "success",
@@ -71,7 +78,8 @@ export class PaystackAdapter {
       // If strict idempotency is required and the SDK blocks it, we can fallback to fetch for this specific endpoint.
       // Paystack's official API for refund creation handles the 'transaction' reference.
       
-      const response = await this.client.refund.create({
+      const client = this.getClient();
+      const response = await client.refund.create({
         transaction: paystackReference,
         amount: amountToRefund * 100, // Convert to kobo/cents
       });
