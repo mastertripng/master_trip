@@ -1,0 +1,1 @@
+ALTER TABLE "trip_items" ADD COLUMN "wholesale_price" numeric(12, 2) NOT NULL;
