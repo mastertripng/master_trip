@@ -2,11 +2,9 @@ import { drizzle } from 'drizzle-orm/postgres-js';
 import postgres from 'postgres';
 import * as schema from './schema';
 
-const connectionString = process.env.DATABASE_URL;
-
-if (!connectionString) {
-  throw new Error("DATABASE_URL is not set");
-}
+// Use a dummy connection string during Vercel build time if DATABASE_URL is missing.
+// It will never actually connect during the build phase.
+const connectionString = process.env.DATABASE_URL || "postgres://dummy:dummy@localhost/dummy";
 
 // Disable prefetch as it is not supported for "Transaction" pool mode
 const client = postgres(connectionString, { prepare: false });

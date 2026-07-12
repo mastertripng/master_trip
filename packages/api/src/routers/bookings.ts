@@ -43,6 +43,98 @@ export const bookingRouter = {
     }),
 
   /**
+   * Adds an item (flight, hotel, etc.) to a DRAFT trip (the user's cart).
+   * Automatically updates the total price of the trip.
+   */
+  addTripItem: protectedProcedure
+    .input(z.object({
+      tripId: z.string().uuid(),
+      type: z.enum(["FLIGHT", "HOTEL", "TOUR", "CAR"]),
+      providerName: z.string().min(1),
+      wholesalePrice: z.string(), // decimal as string
+      price: z.string(), // decimal as string
+      currency: z.string().default("NGN"),
+      metadata: z.record(z.any()).default({}), // booking details, flight specifics, etc.
+    }))
+    .handler(async ({ input, context }) => {
+      // 1. Verify trip exists, is DRAFT, and belongs to user
+      const [existingTrip] = await db
+        .select()
+        .from(trips)
+        .where(and(eq(trips.id, input.tripId), eq(trips.userId, context.userId)))
+        .limit(1);
+
+      if (!existingTrip) throw new Error("Trip not found or access denied");
+      if (existingTrip.status !== "DRAFT") throw new Error("Cannot add items to a paid or processing trip");
+
+      // 2. Insert the item
+      const [item] = await db
+        .insert(tripItems)
+        .values({
+          tripId: input.tripId,
+          type: input.type,
+          providerName: input.providerName,
+          wholesalePrice: input.wholesalePrice,
+          price: input.price,
+          currency: input.currency,
+          metadata: input.metadata,
+        })
+        .returning();
+
+      // 3. Update the parent trip's total price
+      const newTotal = parseFloat(existingTrip.totalPrice) + parseFloat(input.price);
+      await db
+        .update(trips)
+        .set({ totalPrice: newTotal.toString(), updatedAt: new Date() })
+        .where(eq(trips.id, input.tripId));
+
+      return item;
+    }),
+
+  /**
+   * Removes an item from the cart (DRAFT trip).
+   * Automatically deducts the price from the total.
+   */
+  removeTripItem: protectedProcedure
+    .input(z.object({
+      tripId: z.string().uuid(),
+      tripItemId: z.string().uuid(),
+    }))
+    .handler(async ({ input, context }) => {
+      // 1. Verify trip exists and belongs to user
+      const [existingTrip] = await db
+        .select()
+        .from(trips)
+        .where(and(eq(trips.id, input.tripId), eq(trips.userId, context.userId)))
+        .limit(1);
+
+      if (!existingTrip || existingTrip.status !== "DRAFT") {
+        throw new Error("Trip not found, access denied, or trip already paid");
+      }
+
+      // 2. Fetch the item to get its price
+      const [item] = await db
+        .select()
+        .from(tripItems)
+        .where(eq(tripItems.id, input.tripItemId))
+        .limit(1);
+
+      if (!item) throw new Error("Item not found");
+
+      // 3. Delete the item
+      await db.delete(tripItems).where(eq(tripItems.id, input.tripItemId));
+
+      // 4. Update parent total price
+      const newTotal = Math.max(0, parseFloat(existingTrip.totalPrice) - parseFloat(item.price));
+      await db
+        .update(trips)
+        .set({ totalPrice: newTotal.toString(), updatedAt: new Date() })
+        .where(eq(trips.id, input.tripId));
+
+      return { success: true, newTotal };
+    }),
+
+  /**
    * Confirms checkout after a successful Paystack payment.
    * Creates a Payment record and marks the trip as PAID.
    * Enqueues fulfilment via QStash (TODO).

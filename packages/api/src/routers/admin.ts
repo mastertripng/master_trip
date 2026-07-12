@@ -423,6 +423,19 @@ export const adminRouter = {
         throw new Error("Payment not found");
       }
 
+      // IDEMPOTENCY CHECK: Prevent double-refunds by calculating existing refunds
+      const existingRefunds = await db.query.refunds.findMany({
+        where: eq(refunds.paymentId, input.paymentId)
+      });
+      
+      const totalRefunded = existingRefunds.reduce((sum, r) => 
+        r.status !== "FAILED" ? sum + parseFloat(r.amount) : sum, 0
+      );
+
+      if (totalRefunded + parseFloat(input.amount) > parseFloat(payment.amount)) {
+        throw new Error("Idempotency violation: Refund amount exceeds total captured payment amount or a pending refund is already in progress.");
+      }
+
       // 2. Create PENDING refund record
       const [refund] = await db
         .insert(refunds)

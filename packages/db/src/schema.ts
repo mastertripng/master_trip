@@ -178,6 +178,7 @@ export const tripItems = pgTable("trip_items", {
   type: tripItemTypeEnum("type").notNull(),
   fulfillmentStatus: fulfillmentStatusEnum("fulfillment_status").default("PENDING").notNull(),
   providerName: text("provider_name").notNull(),
+  wholesalePrice: decimal("wholesale_price", { precision: 12, scale: 2 }).notNull(),
   price: decimal("price", { precision: 12, scale: 2 }).notNull(),
   currency: text("currency").default("NGN").notNull(),
   metadata: json("metadata").default({}).notNull()

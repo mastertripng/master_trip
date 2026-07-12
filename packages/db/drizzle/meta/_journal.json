@@ -15,6 +15,13 @@
       "when": 1783779477060,
       "tag": "0001_sturdy_emma_frost",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1783842016314,
+      "tag": "0002_harsh_loki",
+      "breakpoints": true
     }
   ]
 }
